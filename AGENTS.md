@@ -16,6 +16,6 @@ Clon de Asteroids en Canvas HTML5 puro. Sin dependencias, bundler, tests ni lint
 
 ## Reglas del repositorio
 
-- El tamaño del canvas está duplicado: constantes `W`/`H` en `game.js` (800×600) y atributos `width`/`height` del `<canvas>` en `index.html`. Deben mantenerse sincronizadas.
+- El tamaño del canvas está duplicado: constantes `W`/`H` en `game.js` (1600×1200) y atributos `width`/`height` del `<canvas>` en `index.html`. Deben mantenerse sincronizadas.
 - Comentarios y textos del juego (HUD, overlays) en español; identificadores en inglés.
 - El README menciona power-ups y la "estrella fugaz", pero no están implementados en `game.js`; el código es la fuente de verdad.
