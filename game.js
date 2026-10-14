@@ -176,6 +176,61 @@ class ShootingStar extends Asteroid {
   }
 }
 
+// ── Skins de la nave ──────────────────────────────────────────────────────────
+// Cada skin define su silueta (nariz hacia +x, escala similar a la clásica)
+// para no alterar el radio de colisión de la nave.
+const SHIP_SKINS = [
+  { name: 'CLÁSICA', color: '#fff',     verts: [[20, 0], [-12, -9], [-7, 0], [-12, 9]] },
+  { name: 'DELTA',   color: '#7fd4ff', verts: [[18, 0], [-14, -12], [-7, -4], [-7, 4], [-14, 12]] },
+  { name: 'FLECHA',  color: '#ff6bd6', verts: [[21, 0], [-13, -6], [-7, 0], [-13, 6]] },
+  { name: 'GÉMENI',  color: '#7dff8f', verts: [[16, 0], [-6, -7], [-14, -10], [-10, -4], [-4, 0], [-10, 4], [-14, 10], [-6, 7]] },
+  { name: 'TITÁN',   color: '#ff9d4a', verts: [[15, 0], [-10, -11], [-13, 0], [-10, 11]] },
+];
+
+const SKIN_STORAGE_KEY = 'asteroids-skin';
+
+/**
+ * Carga el índice de skin guardado en localStorage.
+ * Devuelve 0 si no hay dato, está corrupto o el almacenamiento
+ * no está disponible (p. ej. modo privado del navegador).
+ * @returns {number} índice válido en SHIP_SKINS
+ */
+function loadSkinIndex() {
+  try {
+    const idx = Number(localStorage.getItem(SKIN_STORAGE_KEY));
+    return Number.isInteger(idx) && idx >= 0 && idx < SHIP_SKINS.length ? idx : 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+/**
+ * Guarda el índice de skin en localStorage.
+ * Si el almacenamiento no está disponible, el skin se mantiene
+ * solo en memoria durante la sesión.
+ * @param {number} idx índice a persistir
+ */
+function saveSkinIndex(idx) {
+  try {
+    localStorage.setItem(SKIN_STORAGE_KEY, String(idx));
+  } catch (err) {
+    // Sin persistencia disponible: la selección sigue vigente en esta sesión
+  }
+}
+
+/**
+ * Pasa al siguiente skin (tecla C), lo persiste y activa el cartel
+ * con su nombre en el HUD.
+ */
+function cycleSkin() {
+  skinIndex = (skinIndex + 1) % SHIP_SKINS.length;
+  saveSkinIndex(skinIndex);
+  skinLabelTimer = 1.6;
+}
+
+let skinIndex      = loadSkinIndex();
+let skinLabelTimer = 0;   // segundos restantes del cartel "SKIN: ..." en el HUD
+
 // ── Ship ──────────────────────────────────────────────────────────────────────
 class Ship {
   constructor() { this.reset(); }
@@ -250,25 +305,26 @@ class Ship {
     // Parpadeo durante invencibilidad de reaparición
     if (this.invincible > 0 && Math.floor(this.invincible * 8) % 2 === 0) return;
 
+    const skin = SHIP_SKINS[skinIndex];
+
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    // Amarillo mientras el power-up "Velocidad" está activo
+    // La nave conserva su color de skin; con "Velocidad" solo la llama cambia
     const boosted = this.speedBoost > 0;
-    ctx.strokeStyle = boosted ? '#ffd24a' : '#fff';
+    ctx.strokeStyle = skin.color;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
-    // Silueta clásica: triángulo con muesca trasera
+    // Silueta del skin activo
     ctx.beginPath();
-    ctx.moveTo( 20,  0);   // nariz
-    ctx.lineTo(-12, -9);   // ala izquierda
-    ctx.lineTo( -7,  0);   // muesca trasera
-    ctx.lineTo(-12,  9);   // ala derecha
+    ctx.moveTo(skin.verts[0][0], skin.verts[0][1]);
+    for (let i = 1; i < skin.verts.length; i++)
+      ctx.lineTo(skin.verts[i][0], skin.verts[i][1]);
     ctx.closePath();
     ctx.stroke();
 
-    // Llama del propulsor
+    // Llama del propulsor: amarilla mientras el power-up "Velocidad" está activo
     if (this.thrusting && Math.random() > 0.35) {
       ctx.beginPath();
       ctx.moveTo(-8, -4);
@@ -455,6 +511,10 @@ function killShip() {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
+  // Cambio de skin disponible en cualquier estado del juego
+  if (pressed('KeyC')) cycleSkin();
+  if (skinLabelTimer > 0) skinLabelTimer -= dt;
+
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
     particles.forEach(p => p.update(dt));
@@ -549,17 +609,21 @@ function update(dt) {
 
 // ── Draw ──────────────────────────────────────────────────────────────────────
 function drawLifeIcon(x, y) {
+  // Réplica en miniatura de la nave con el skin activo
+  const skin = SHIP_SKINS[skinIndex];
+  const ICON_SCALE = 0.45;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth   = 1.2;
+  ctx.scale(ICON_SCALE, ICON_SCALE);
+  ctx.strokeStyle = skin.color;
+  // lineWidth compensado por la escala para mantener 1.2 px en pantalla
+  ctx.lineWidth   = 1.2 / ICON_SCALE;
   ctx.lineJoin    = 'round';
   ctx.beginPath();
-  ctx.moveTo( 9,  0);
-  ctx.lineTo(-6, -5);
-  ctx.lineTo(-3,  0);
-  ctx.lineTo(-6,  5);
+  ctx.moveTo(skin.verts[0][0], skin.verts[0][1]);
+  for (let i = 1; i < skin.verts.length; i++)
+    ctx.lineTo(skin.verts[i][0], skin.verts[i][1]);
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
@@ -587,6 +651,15 @@ function drawHUD() {
       ctx.fillStyle = POWERUP_COLORS.triple;
       ctx.fillText(`TRIPLE ${ship.tripleShot.toFixed(1)}s`, W / 2, hudY);
     }
+  }
+
+  // Nombre del skin tras cambiar con C (se desvanece en el último medio segundo)
+  if (skinLabelTimer > 0) {
+    const skin = SHIP_SKINS[skinIndex];
+    ctx.globalAlpha = Math.min(1, skinLabelTimer / 0.5);
+    ctx.fillStyle = skin.color;
+    ctx.fillText(`SKIN: ${skin.name}`, W / 2, 66);
+    ctx.globalAlpha = 1;
   }
 
   for (let i = 0; i < lives; i++)
