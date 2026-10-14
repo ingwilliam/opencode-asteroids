@@ -30,6 +30,17 @@ Luego visita `http://localhost:3000`.
 | `↑`       | Propulsar  |
 | `Espacio` | Disparar   |
 
+## Skins
+
+Pulsa `C` para cambiar de skin (la selección se recuerda en el navegador):
+
+1. **CLÁSICA** — blanca, la nave original.
+2. **DELTA** — azul.
+3. **FLECHA** — rosa.
+4. **GÉMENI** — verde.
+5. **TITÁN** — naranja.
+6. **MORADA** — morada, el doble de grande que la original y otorga el doble de puntos por cada asteroide destruido (incluida la estrella fugaz); a cambio, su radio de colisión también es el doble.
+
 ## Puntuación
 
 | Asteroide | Puntos |
