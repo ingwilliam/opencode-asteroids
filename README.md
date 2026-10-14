@@ -45,4 +45,5 @@ Luego visita `http://localhost:3000`.
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Power-up **Velocidad** (rayo amarillo): aparece periódicamente y, al recogerlo, duplica la propulsión de la nave durante 5 segundos
+- Power-up **Triple** (tres trazos cian): al recogerlo, cada disparo lanza 3 balas paralelas durante 5 segundos
 - **Estrella fugaz**: asteroide especial cian muy rápido que aparece periódicamente, no se fragmenta y desaparece sola a los pocos segundos; destruirla a tiempo otorga 500 puntos
