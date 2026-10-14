@@ -247,6 +247,7 @@ class Ship {
     this.shootCooldown = 0;
     this.speedBoost    = 0;   // segundos restantes del power-up "Velocidad"
     this.tripleShot    = 0;   // segundos restantes del power-up "Triple"
+    this.shield        = 0;   // segundos restantes del power-up "Escudo"
     this.dead          = false;
   }
 
@@ -256,6 +257,7 @@ class Ship {
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedBoost    > 0) this.speedBoost    -= dt;
     if (this.tripleShot    > 0) this.tripleShot    -= dt;
+    if (this.shield        > 0) this.shield        -= dt;
 
     const ROT   = 3.5;   // rad/s
     const THRUST = 260;  // px/s²
@@ -335,22 +337,41 @@ class Ship {
     }
 
     ctx.restore();
+
+    // Burbuja del "Escudo": envuelve a la nave y late suavemente
+    if (this.shield > 0) {
+      // Se desvanece al final para avisar que va a expirar (como la estrella fugaz)
+      const alpha  = Math.min(1, this.shield / 1.5);
+      const radius = 20 + 1.5 * Math.sin(this.shield * 8);
+      ctx.strokeStyle = SHIELD_COLOR;
+      ctx.globalAlpha  = alpha;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   }
 }
 
-// ── Power-ups: "Velocidad" y "Triple" ──────────────────────────────────────────
-const POWERUP_TTL  = 10;  // segundos en pantalla antes de desaparecer
-const BOOST_TIME   = 5;   // duración del efecto "Velocidad" al recogerlo
-const TRIPLE_TIME  = 5;   // duración del efecto "Triple" al recogerlo
+// ── Power-ups: "Velocidad", "Triple" y "Escudo" ────────────────────────────────
+const POWERUP_TTL     = 10;   // segundos en pantalla antes de desaparecer
+const BOOST_TIME      = 5;    // duración del efecto "Velocidad" al recogerlo
+const TRIPLE_TIME     = 5;    // duración del efecto "Triple" al recogerlo
+const SHIELD_TIME     = 8;    // duración base del "Escudo" al recogerlo
+const SHIELD_HIT_COST = 1.5;  // segundos de escudo que consume cada impacto absorbido
+const SHIELD_COLOR    = '#7fd4ff';   // mismo cian que la estrella fugaz
 
 const POWERUP_COLORS = {
-  speed:  '#ffd24a',   // Velocidad: rayo amarillo
-  triple: '#7fd4ff',   // Triple: tres trazos cian
+  speed:  '#ffd24a',      // Velocidad: rayo amarillo
+  triple: '#7fd4ff',      // Triple: tres trazos cian
+  shield: SHIELD_COLOR,   // Escudo: anillos cian
 };
 
 class PowerUp {
+  // type: 'speed' ("Velocidad"), 'triple' ("Triple") o 'shield' ("Escudo")
   constructor(type) {
-    this.type = type;   // 'speed' | 'triple'
+    this.type = type;
     this.x = rand(0, W);
     this.y = rand(0, H);
     const angle = rand(0, Math.PI * 2);
@@ -380,8 +401,9 @@ class PowerUp {
     ctx.strokeStyle = POWERUP_COLORS[this.type];
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
-    if (this.type === 'triple') this.drawTripleIcon();
-    else this.drawSpeedIcon();
+    if (this.type === 'triple')      this.drawTripleIcon();
+    else if (this.type === 'shield') this.drawShieldIcon();
+    else                             this.drawSpeedIcon();
     ctx.restore();
   }
 
@@ -406,6 +428,16 @@ class PowerUp {
       ctx.lineTo( 6, oy);
       ctx.stroke();
     }
+  }
+
+  // Anillos concéntricos del power-up "Escudo": la burbuja que envuelve a la nave
+  drawShieldIcon() {
+    ctx.beginPath();
+    ctx.arc(0, 0, 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.stroke();
   }
 }
 
@@ -541,8 +573,10 @@ function update(dt) {
   // Aparición periódica de power-ups (máximo uno en pantalla, tipo aleatorio)
   powerUpTimer -= dt;
   if (powerUpTimer <= 0) {
-    if (powerUps.length === 0)
-      powerUps.push(new PowerUp(Math.random() < 0.5 ? 'speed' : 'triple'));
+    if (powerUps.length === 0) {
+      const types = ['speed', 'triple', 'shield'];
+      powerUps.push(new PowerUp(types[Math.floor(Math.random() * types.length)]));
+    }
     powerUpTimer = rand(10, 18);
   }
 
@@ -586,8 +620,9 @@ function update(dt) {
   for (const p of powerUps) {
     if (dist(ship, p) < ship.radius + p.radius) {
       p.dead = true;
-      if (p.type === 'triple') ship.tripleShot = TRIPLE_TIME;
-      else ship.speedBoost = BOOST_TIME;
+      if (p.type === 'triple')      ship.tripleShot = TRIPLE_TIME;
+      else if (p.type === 'shield') ship.shield     = SHIELD_TIME;
+      else                          ship.speedBoost = BOOST_TIME;
       explode(p.x, p.y, 6);
     }
   }
@@ -597,10 +632,20 @@ function update(dt) {
   if (ship.invincible <= 0) {
     for (const a of asteroids) {
       if (dist(ship, a) < ship.radius + a.radius * 0.82) {
-        killShip();
-        break;
+        // Con el "Escudo" activo el impacto se absorbe: el asteroide se
+        // destruye sin puntos ni fragmentos y el escudo se desgasta
+        if (ship.shield > 0) {
+          a.dead = true;
+          ship.shield = Math.max(0, ship.shield - SHIELD_HIT_COST);
+          explode(a.x, a.y, a.size * 5);
+        } else {
+          killShip();
+          break;
+        }
       }
     }
+    // Se retiran aquí los asteroides destruidos por el escudo
+    asteroids = asteroids.filter(a => !a.dead);
   }
 
   // Nivel completado
@@ -639,9 +684,9 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(`NIVEL ${level}`, W / 2, 26);
 
-  // Cuenta regresiva de los power-ups activos (apilada bajo el nivel)
+  // Cuentas regresivas de los power-ups activos (apiladas bajo el nivel)
+  let hudY = 46;
   if (state === 'playing') {
-    let hudY = 46;
     if (ship.speedBoost > 0) {
       ctx.fillStyle = POWERUP_COLORS.speed;
       ctx.fillText(`VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, W / 2, hudY);
@@ -650,6 +695,12 @@ function drawHUD() {
     if (ship.tripleShot > 0) {
       ctx.fillStyle = POWERUP_COLORS.triple;
       ctx.fillText(`TRIPLE ${ship.tripleShot.toFixed(1)}s`, W / 2, hudY);
+      hudY += 18;
+    }
+    if (ship.shield > 0) {
+      ctx.fillStyle = POWERUP_COLORS.shield;
+      ctx.fillText(`ESCUDO ${ship.shield.toFixed(1)}s`, W / 2, hudY);
+      hudY += 18;
     }
   }
 
@@ -658,7 +709,7 @@ function drawHUD() {
     const skin = SHIP_SKINS[skinIndex];
     ctx.globalAlpha = Math.min(1, skinLabelTimer / 0.5);
     ctx.fillStyle = skin.color;
-    ctx.fillText(`SKIN: ${skin.name}`, W / 2, 66);
+    ctx.fillText(`SKIN: ${skin.name}`, W / 2, hudY);
     ctx.globalAlpha = 1;
   }
 
