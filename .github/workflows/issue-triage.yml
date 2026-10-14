@@ -1,0 +1,62 @@
+name: Formatear issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  format-issue:
+    # Evita procesar issues creados por bots o GitHub Apps
+    if: github.event.issue.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/glm-5.2
+          prompt: |
+            Se acaba de abrir el issue #${{ github.event.issue.number }} en este repositorio.
+            Tu tarea es formatearlo para facilitar su revisión, sin perder nada de lo que escribió la persona.
+
+            1. Lee el título y el cuerpo del issue (gh issue view ${{ github.event.issue.number }}).
+
+            2. Edita el cuerpo del issue con gh issue edit ${{ github.event.issue.number }} --body-file,
+               dejándolo con esta estructura:
+               - Sección superior formateada: tipo de reporte, resumen en una o dos líneas y el
+                 contexto relevante extraído del texto original.
+               - El texto original completo y sin ninguna modificación, dentro de un bloque plegable:
+                 <details><summary>Descripción original</summary>
+                 ...texto original tal cual...
+                 </details>
+               - Sección final "Aviso de auto-formateo" que explique en español: este issue fue
+                 formateado automáticamente por una GitHub Action; la descripción original se conserva
+                 íntegra en el bloque plegable; ante cualquier discrepancia, la descripción original
+                 es la fuente de verdad.
+
+            3. Añade etiquetas al issue según las palabras clave del título y del cuerpo
+               (comparación insensible a mayúsculas; crea la etiqueta con gh label create si no existe):
+               - "bug", "error", "fallo", "no funciona", "se rompe" -> bug
+               - "feature", "mejora", "agregar", "añadir", "propuesta", "idea" -> enhancement
+               - "docs", "readme", "documentación", "documentacion" -> documentation
+               - "pregunta", "duda", "cómo", "como", "ayuda" -> question
+               - Si ninguna coincide -> needs-triage
+               Aplica la etiqueta con: gh issue edit ${{ github.event.issue.number }} --add-label <etiqueta>
+
+            4. Contexto del repositorio para clasificar mejor: todo el juego vive en game.js
+               (canvas HTML5 puro, sin dependencias); el tamaño del canvas está duplicado entre las
+               constantes W/H de game.js y el <canvas> de index.html; comentarios y textos del juego
+               en español, identificadores en inglés.
+
+            5. Prohibido: cerrar el issue, hacer push, crear ramas o pull requests, o modificar
+               archivos del repositorio. Solo edita el cuerpo del issue y sus etiquetas.
