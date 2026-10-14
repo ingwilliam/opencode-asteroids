@@ -177,14 +177,16 @@ class ShootingStar extends Asteroid {
 }
 
 // ── Skins de la nave ──────────────────────────────────────────────────────────
-// Cada skin define su silueta (nariz hacia +x, escala similar a la clásica)
-// para no alterar el radio de colisión de la nave.
+// Cada skin define su silueta (nariz hacia +x) a escala base de la clásica.
+// `scale` agranda la silueta y el radio de colisión de la nave;
+// `scoreMultiplier` duplica los puntos obtenidos con ese skin.
 const SHIP_SKINS = [
-  { name: 'CLÁSICA', color: '#fff',     verts: [[20, 0], [-12, -9], [-7, 0], [-12, 9]] },
-  { name: 'DELTA',   color: '#7fd4ff', verts: [[18, 0], [-14, -12], [-7, -4], [-7, 4], [-14, 12]] },
-  { name: 'FLECHA',  color: '#ff6bd6', verts: [[21, 0], [-13, -6], [-7, 0], [-13, 6]] },
-  { name: 'GÉMENI',  color: '#7dff8f', verts: [[16, 0], [-6, -7], [-14, -10], [-10, -4], [-4, 0], [-10, 4], [-14, 10], [-6, 7]] },
-  { name: 'TITÁN',   color: '#ff9d4a', verts: [[15, 0], [-10, -11], [-13, 0], [-10, 11]] },
+  { name: 'CLÁSICA', color: '#fff',     scale: 1, scoreMultiplier: 1, verts: [[20, 0], [-12, -9], [-7, 0], [-12, 9]] },
+  { name: 'DELTA',   color: '#7fd4ff', scale: 1, scoreMultiplier: 1, verts: [[18, 0], [-14, -12], [-7, -4], [-7, 4], [-14, 12]] },
+  { name: 'FLECHA',  color: '#ff6bd6', scale: 1, scoreMultiplier: 1, verts: [[21, 0], [-13, -6], [-7, 0], [-13, 6]] },
+  { name: 'GÉMENI',  color: '#7dff8f', scale: 1, scoreMultiplier: 1, verts: [[16, 0], [-6, -7], [-14, -10], [-10, -4], [-4, 0], [-10, 4], [-14, 10], [-6, 7]] },
+  { name: 'TITÁN',   color: '#ff9d4a', scale: 1, scoreMultiplier: 1, verts: [[15, 0], [-10, -11], [-13, 0], [-10, 11]] },
+  { name: 'MORADA',  color: '#b06bff', scale: 2, scoreMultiplier: 2, verts: [[24, 0], [8, -6], [-6, -13], [-16, -8], [-11, 0], [-16, 8], [-6, 13], [8, 6]] },
 ];
 
 const SKIN_STORAGE_KEY = 'asteroids-skin';
@@ -241,7 +243,6 @@ class Ship {
     this.angle  = -Math.PI / 2;
     this.vx     = 0;
     this.vy     = 0;
-    this.radius = 12;
     this.thrusting     = false;
     this.invincible    = 3;
     this.shootCooldown = 0;
@@ -249,6 +250,11 @@ class Ship {
     this.tripleShot    = 0;   // segundos restantes del power-up "Triple"
     this.shield        = 0;   // segundos restantes del power-up "Escudo"
     this.dead          = false;
+  }
+
+  // Radio de colisión: crece con la escala del skin activo (la MORADA es el doble de grande)
+  get radius() {
+    return 12 * SHIP_SKINS[skinIndex].scale;
   }
 
   update(dt) {
@@ -283,7 +289,8 @@ class Ship {
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
     this.shootCooldown = 0.2;
-    const NOSE = 21;
+    // La boca del cañón acompaña la escala del skin activo
+    const NOSE = 21 * SHIP_SKINS[skinIndex].scale;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
 
@@ -308,14 +315,18 @@ class Ship {
     if (this.invincible > 0 && Math.floor(this.invincible * 8) % 2 === 0) return;
 
     const skin = SHIP_SKINS[skinIndex];
+    const scale = skin.scale;
 
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
+    // La silueta se dibuja a escala base y se agranda según el skin
+    ctx.scale(scale, scale);
     // La nave conserva su color de skin; con "Velocidad" solo la llama cambia
     const boosted = this.speedBoost > 0;
     ctx.strokeStyle = skin.color;
-    ctx.lineWidth   = 1.5;
+    // lineWidth compensado por la escala para mantener ~1.5 px en pantalla
+    ctx.lineWidth   = 1.5 / scale;
     ctx.lineJoin    = 'round';
 
     // Silueta del skin activo
@@ -327,6 +338,7 @@ class Ship {
     ctx.stroke();
 
     // Llama del propulsor: amarilla mientras el power-up "Velocidad" está activo
+    // (las coordenadas van dentro del ctx.scale, así que también crecen con el skin)
     if (this.thrusting && Math.random() > 0.35) {
       ctx.beginPath();
       ctx.moveTo(-8, -4);
@@ -342,7 +354,8 @@ class Ship {
     if (this.shield > 0) {
       // Se desvanece al final para avisar que va a expirar (como la estrella fugaz)
       const alpha  = Math.min(1, this.shield / 1.5);
-      const radius = 20 + 1.5 * Math.sin(this.shield * 8);
+      // La burbuja acompaña la escala del skin para envolver naves grandes
+      const radius = (20 + 1.5 * Math.sin(this.shield * 8)) * scale;
       ctx.strokeStyle = SHIELD_COLOR;
       ctx.globalAlpha  = alpha;
       ctx.lineWidth   = 1.5;
@@ -607,7 +620,8 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += a.points;
+        // La MORADA (skin de escala 2) duplica los puntos de cada asteroide
+        score += a.points * SHIP_SKINS[skinIndex].scoreMultiplier;
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
       }
@@ -657,13 +671,14 @@ function drawLifeIcon(x, y) {
   // Réplica en miniatura de la nave con el skin activo
   const skin = SHIP_SKINS[skinIndex];
   const ICON_SCALE = 0.45;
+  const scale = ICON_SCALE * skin.scale;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  ctx.scale(ICON_SCALE, ICON_SCALE);
+  ctx.scale(scale, scale);
   ctx.strokeStyle = skin.color;
   // lineWidth compensado por la escala para mantener 1.2 px en pantalla
-  ctx.lineWidth   = 1.2 / ICON_SCALE;
+  ctx.lineWidth   = 1.2 / scale;
   ctx.lineJoin    = 'round';
   ctx.beginPath();
   ctx.moveTo(skin.verts[0][0], skin.verts[0][1]);
@@ -713,8 +728,16 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   }
 
+  // Indicador persistente del bono del skin MORADA mientras está activo
+  if (SHIP_SKINS[skinIndex].scoreMultiplier > 1) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = SHIP_SKINS[skinIndex].color;
+    ctx.fillText(`PUNTOS x${SHIP_SKINS[skinIndex].scoreMultiplier}`, 14, 46);
+    ctx.textAlign = 'center';
+  }
+
   for (let i = 0; i < lives; i++)
-    drawLifeIcon(W - 16 - i * 22, 18);
+    drawLifeIcon(W - 16 - i * 22, 20);
 
 }
 
